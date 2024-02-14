@@ -9,19 +9,19 @@ import (
 type Storage interface {
 	CreateAccount(*Account) error
 	DeleteAccount(int) error
-	UpdateAccount(*Account) error
+	UpdateAccount(int, *Account) error
 	GetAccounts() ([]*Account, error)
 	GetAccountByID(int) (*Account, error)
 
 	CreateProduct(*Product) error
 	DeleteProduct(int) (error, error, error)
-	UpdateProduct(*Product) error
+	UpdateProduct(int, *Product) error
 	GetProducts() ([]*Product, error)
 	GetProductByID(int) (*Product, error)
 
 	CreateReview(*Review) error
 	DeleteReview(int) error
-	UpdateReview(*Review) error
+	UpdateReview(int, *Review) error
 	GetReviews() ([]*Review, error)
 	GetReviewByID(int) (*Review, error)
 }
@@ -83,8 +83,10 @@ func (s *PostgresStore) CreateAccount(acc *Account) error {
 	return nil
 }
 
-func (s *PostgresStore) UpdateAccount(*Account) error {
-	return nil
+func (s *PostgresStore) UpdateAccount(id int, account *Account) error {
+	_, err := s.db.Query(`UPDATE account SET first_name=$2, last_name=$3, e_mail=$4 WHERE id=$1`,
+		id, account.FirstName, account.LastName, account.Email)
+	return err
 }
 
 func (s *PostgresStore) DeleteAccount(id int) error {
@@ -177,8 +179,10 @@ func scanIntoProduct(rows *sql.Rows) (*Product, error) {
 	return product, err
 }
 
-func (s *PostgresStore) UpdateProduct(*Product) error {
-	return nil
+func (s *PostgresStore) UpdateProduct(id int, product *Product) error {
+	_, err := s.db.Query(`update product set name=$2, price=$3, measurements=$4, description=$5, packaging=$6 WHERE id=$1`,
+		id, product.Name, product.Price, product.Measurements, product.Description, product.Packaging)
+	return err
 }
 
 func (s *PostgresStore) DeleteProduct(id int) (error, error, error) {
@@ -248,8 +252,10 @@ func (s *PostgresStore) CreateReview(rev *Review) error {
 	return nil
 }
 
-func (s *PostgresStore) UpdateReview(*Review) error {
-	return nil
+func (s *PostgresStore) UpdateReview(id int, review *Review) error {
+	_, err := s.db.Query(`UPDATE review SET rating_given=$2, text=$3 WHERE id=$1`,
+		id, review.RatingGiven, review.Text)
+	return err
 }
 
 func (s *PostgresStore) DeleteReview(id int) error {

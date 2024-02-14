@@ -44,6 +44,7 @@ func (s *APIServer) handleAccount(w http.ResponseWriter, r *http.Request) error 
 
 	return nil
 }
+
 func (s *APIServer) handleGetAccountByID(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		id, err := getID(r)
@@ -59,11 +60,26 @@ func (s *APIServer) handleGetAccountByID(w http.ResponseWriter, r *http.Request)
 	if r.Method == "DELETE" {
 		return s.handleDeleteAccount(w, r)
 	}
+	if r.Method == "PUT"{
+		return s.handleUpdateAccount(w, r)
+	}
 	return fmt.Errorf("method not allowed %s", r.Method)
 }
 
 func (s *APIServer) handleUpdateAccount(w http.ResponseWriter, r *http.Request) error {
-	return nil
+	id, err1 := getID(r)
+	if err1 != nil {
+		return err1
+	}
+	var account Account
+	err := json.NewDecoder(r.Body).Decode(&account)
+	if err != nil {
+		return err
+	}
+	if err := s.store.UpdateAccount(id, &account); err != nil {
+		return err
+	}
+	return WriteJSON(w, http.StatusOK, map[string]int{"updated": id})
 }
 
 func (s *APIServer) handleGetAccount(w http.ResponseWriter, r *http.Request) error {
@@ -131,11 +147,26 @@ func (s *APIServer) handleGetProductByID(w http.ResponseWriter, r *http.Request)
 	if r.Method == "DELETE" {
 		return s.handleDeleteProduct(w, r)
 	}
+	if r.Method == "PUT"{
+		return s.handleUpdateProduct(w, r)
+	}
 	return fmt.Errorf("method not allowed %s", r.Method)
 }
 
 func (s *APIServer) handleUpdateProduct(w http.ResponseWriter, r *http.Request) error {
-	return nil
+	id, err1 := getID(r)
+	if err1 != nil {
+		return err1
+	}
+	var product Product
+	err := json.NewDecoder(r.Body).Decode(&product)
+	if err != nil {
+		return err
+	}
+	if err := s.store.UpdateProduct(id, &product); err != nil {
+		return err
+	}
+	return WriteJSON(w, http.StatusOK, map[string]int{"updated": id})
 }
 
 func (s *APIServer) handleGetProduct(w http.ResponseWriter, r *http.Request) error {
@@ -225,7 +256,23 @@ func (s *APIServer) handleGetReview(w http.ResponseWriter, r *http.Request) erro
 }
 
 func (s *APIServer) handleUpdateReview(w http.ResponseWriter, r *http.Request) error {
-	return nil
+	id, err1 := getID(r)
+	if err1 != nil {
+		return err1
+	}
+	var review Review
+	err := json.NewDecoder(r.Body).Decode(&review)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return err
+	}
+	if err := s.store.UpdateReview(id, &review); err != nil {
+		return err
+	}
+	if r.Method == "PUT"{
+		return s.handleUpdateAccount(w, r)
+	}
+	return WriteJSON(w, http.StatusOK, map[string]int{"updated": id})
 }
 
 func (s *APIServer) handleCreateReview(w http.ResponseWriter, r *http.Request) error {
