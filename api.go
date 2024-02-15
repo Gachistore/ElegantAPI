@@ -12,14 +12,16 @@ import (
 func (s *APIServer) Run() {
 	router := mux.NewRouter()
 
-	router.HandleFunc("/account", makeHTTPHandleFunc(s.handleAccount))
-	router.HandleFunc("/account/{id}", makeHTTPHandleFunc(s.handleGetAccountByID))
+	router.HandleFunc("/accounts", makeHTTPHandleFunc(s.handleAccount))
+	router.HandleFunc("/accounts/{id}", makeHTTPHandleFunc(s.handleGetAccountByID))
 
-	router.HandleFunc("/product", makeHTTPHandleFunc(s.handleProduct))
-	router.HandleFunc("/product/{id}", makeHTTPHandleFunc(s.handleGetProductByID))
+	router.HandleFunc("/products", makeHTTPHandleFunc(s.handleProduct))
+	router.HandleFunc("/products/{id}", makeHTTPHandleFunc(s.handleGetProductByID))
 
-	router.HandleFunc("/review", makeHTTPHandleFunc(s.handleReview))
-	router.HandleFunc("/review/{id}", makeHTTPHandleFunc(s.handleGetReviewByID))
+	router.HandleFunc("/products/reviews", makeHTTPHandleFunc(s.handleReview))
+	router.HandleFunc("/products/reviews/{id}", makeHTTPHandleFunc(s.handleGetReviewByID))
+
+	router.HandleFunc("/products/new", makeHTTPHandleFunc(s.handleGetNewProducts))
 
 	log.Println("JSON API server running on port: ", s.listenAddr)
 
@@ -60,7 +62,7 @@ func (s *APIServer) handleGetAccountByID(w http.ResponseWriter, r *http.Request)
 	if r.Method == "DELETE" {
 		return s.handleDeleteAccount(w, r)
 	}
-	if r.Method == "PUT"{
+	if r.Method == "PUT" {
 		return s.handleUpdateAccount(w, r)
 	}
 	return fmt.Errorf("method not allowed %s", r.Method)
@@ -147,7 +149,7 @@ func (s *APIServer) handleGetProductByID(w http.ResponseWriter, r *http.Request)
 	if r.Method == "DELETE" {
 		return s.handleDeleteProduct(w, r)
 	}
-	if r.Method == "PUT"{
+	if r.Method == "PUT" {
 		return s.handleUpdateProduct(w, r)
 	}
 	return fmt.Errorf("method not allowed %s", r.Method)
@@ -269,7 +271,7 @@ func (s *APIServer) handleUpdateReview(w http.ResponseWriter, r *http.Request) e
 	if err := s.store.UpdateReview(id, &review); err != nil {
 		return err
 	}
-	if r.Method == "PUT"{
+	if r.Method == "PUT" {
 		return s.handleUpdateAccount(w, r)
 	}
 	return WriteJSON(w, http.StatusOK, map[string]int{"updated": id})
@@ -339,4 +341,14 @@ func getID(r *http.Request) (int, error) {
 		return id, fmt.Errorf("invalid id given %s", idStr)
 	}
 	return id, nil
+}
+
+// ADDITIONAL ROUTES
+
+func  (s *APIServer) handleGetNewProducts(w http.ResponseWriter, r *http.Request) error {
+	products, err := s.store.GetNewProducts()
+	if err != nil {
+		return err
+	}
+	return WriteJSON(w, http.StatusOK, products)
 }

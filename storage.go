@@ -18,6 +18,7 @@ type Storage interface {
 	UpdateProduct(int, *Product) error
 	GetProducts() ([]*Product, error)
 	GetProductByID(int) (*Product, error)
+	GetNewProducts() ([]*Product, error)
 
 	CreateReview(*Review) error
 	DeleteReview(int) error
@@ -218,6 +219,22 @@ func (s *PostgresStore) GetProducts() ([]*Product, error) {
 		products = append(products, product)
 	}
 
+	return products, nil
+}
+
+func (s *PostgresStore) GetNewProducts() ([]*Product, error) {
+	rows, err := s.db.Query(`select * from product order by id desc limit 5`)
+	if err != nil {
+		return nil, err
+	}
+	products := []*Product{}
+	for rows.Next() {
+		product, err := scanIntoProduct(rows)
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, product)
+	}
 	return products, nil
 }
 
