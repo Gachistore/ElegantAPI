@@ -17,11 +17,12 @@ func (s *APIServer) Run() {
 
 	router.HandleFunc("/products", makeHTTPHandleFunc(s.handleProduct))
 	router.HandleFunc("/products/{id}", makeHTTPHandleFunc(s.handleGetProductByID))
+	router.HandleFunc("/products/new", makeHTTPHandleFunc(s.handleGetNewProducts))
 
 	router.HandleFunc("/products/reviews", makeHTTPHandleFunc(s.handleReview))
 	router.HandleFunc("/products/reviews/{id}", makeHTTPHandleFunc(s.handleGetReviewByID))
 
-	router.HandleFunc("/products/new", makeHTTPHandleFunc(s.handleGetNewProducts))
+	router.HandleFunc("/products/categories", makeHTTPHandleFunc(s.handleGetCategory))
 
 	log.Println("JSON API server running on port: ", s.listenAddr)
 
@@ -135,11 +136,16 @@ func (s *APIServer) handleProduct(w http.ResponseWriter, r *http.Request) error 
 }
 
 func (s *APIServer) handleGetProductByID(w http.ResponseWriter, r *http.Request) error {
+	idStr := mux.Vars(r)["id"]
+	if idStr == "categories" {
+		return s.handleGetCategory(w, r)
+	}
 	if r.Method == "GET" {
 		id, err := getID(r)
 		if err != nil {
 			return err
 		}
+
 		product, err := s.store.GetProductByID(id)
 		if err != nil {
 			return err
@@ -300,6 +306,17 @@ func (s *APIServer) handleDeleteReview(w http.ResponseWriter, r *http.Request) e
 	}
 	return WriteJSON(w, http.StatusOK, map[string]int{"deleted": id})
 }
+
+// CATEGORY
+
+func (s *APIServer) handleGetCategory(w http.ResponseWriter, r *http.Request) error {
+	caregories, err := s.store.GetCategories()
+	if err != nil {
+		return err
+	}
+	return WriteJSON(w, http.StatusOK, caregories)
+}
+
 
 // MISC
 

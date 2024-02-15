@@ -25,6 +25,8 @@ type Storage interface {
 	UpdateReview(int, *Review) error
 	GetReviews() ([]*Review, error)
 	GetReviewByID(int) (*Review, error)
+
+	GetCategories() ([]*Category, error)
 }
 
 type PostgresStore struct {
@@ -317,6 +319,31 @@ func scanIntoReview(rows *sql.Rows) (*Review, error) {
 		&review.RatingGiven,
 		&review.Text)
 	return review, err
+}
+
+// CATEGORY
+
+func (s *PostgresStore) GetCategories() ([]*Category, error) {
+	rows, err := s.db.Query(`select * from category`)
+	if err != nil {
+		return nil, err
+	}
+	categories := []*Category{}
+	for rows.Next() {
+		category, err := scanIntoCategory(rows)
+		if err != nil {
+			return nil, err
+		}
+		categories = append(categories, category)
+	}
+	return categories, nil
+}
+
+func scanIntoCategory(rows *sql.Rows) (*Category, error) {
+	category := new(Category)
+	err := rows.Scan(
+		&category.Name)
+	return category, err
 }
 
 // MISC

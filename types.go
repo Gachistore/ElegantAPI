@@ -16,6 +16,10 @@ type Product struct {
 	Packaging    string  `json:"packaging"`
 }
 
+type Category struct {
+	Name string `json:"name"`
+}
+
 type Review struct {
 	ID          int     `json:"id"`
 	AccID       int     `json:"accID"`
@@ -68,4 +72,8 @@ type CreateReviewRequest struct {
 	ProdID      int     `json:"prodID"`
 	RatingGiven float64 `json:"ratingGiven"`
 	Text        string  `json:"text"`
+}
+
+type CreateCategoryRequest struct {
+	Name string `json:"name"`
 }
