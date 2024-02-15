@@ -19,6 +19,7 @@ type Storage interface {
 	GetProducts() ([]*Product, error)
 	GetProductByID(int) (*Product, error)
 	GetNewProducts() ([]*Product, error)
+	SearchProducts(map[string]any) ([]*Product, error)
 
 	CreateReview(*Review) error
 	DeleteReview(int) error
@@ -240,6 +241,35 @@ func (s *PostgresStore) GetNewProducts() ([]*Product, error) {
 	return products, nil
 }
 
+func (s *PostgresStore) SearchProducts(params map[string]any) ([]*Product, error) {
+	name := AnyToStr(params["name"])
+	name = "%" + name + "%"
+	priceFrom := params["priceFrom"]
+	priceTo := params["priceTo"]
+	skip := params["skip"]
+	limit := params["limit"]
+	if skip == "" {
+		skip = "1"
+	}
+	if limit == "" {
+		limit = "2147483647"
+	}
+	rows, err := s.db.Query(`select * from product where lower(name) like lower($1) and  price >= $2 and price <=$3 order by id offset $4 - 1 limit $5 - $4 + 1 `,
+		name, priceFrom, priceTo, skip, limit)
+	if err != nil {
+		return nil, err
+	}
+	products := []*Product{}
+	for rows.Next() {
+		product, err := scanIntoProduct(rows)
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, product)
+	}
+	return products, nil
+}
+
 // REVIEW
 
 func (s *PostgresStore) CreateReviewTable() error {
@@ -377,4 +407,15 @@ func (s *PostgresStore) CreateProductReviewTable() error {
 
 	_, err := s.db.Exec(query)
 	return err
+}
+
+func AnyToStr(param any) string {
+	var str string
+	switch v := param.(type) {
+	case string:
+		str = v
+	default:
+		str = fmt.Sprintf("%v", param)
+	}
+	return str
 }

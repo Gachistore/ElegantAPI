@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 )
@@ -23,6 +24,7 @@ func (s *APIServer) Run() {
 	router.HandleFunc("/products/reviews/{id}", makeHTTPHandleFunc(s.handleGetReviewByID))
 
 	router.HandleFunc("/products/categories", makeHTTPHandleFunc(s.handleGetCategory))
+	//router.HandleFunc("/products/search", makeHTTPHandleFunc(s.handleSearchProduct))
 
 	log.Println("JSON API server running on port: ", s.listenAddr)
 
@@ -140,6 +142,9 @@ func (s *APIServer) handleGetProductByID(w http.ResponseWriter, r *http.Request)
 	if idStr == "categories" {
 		return s.handleGetCategory(w, r)
 	}
+	//if strings.HasPrefix(idStr, "search") {
+	//	return s.handleSearchProduct(w, r)
+	//}
 	if r.Method == "GET" {
 		id, err := getID(r)
 		if err != nil {
@@ -178,11 +183,25 @@ func (s *APIServer) handleUpdateProduct(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *APIServer) handleGetProduct(w http.ResponseWriter, r *http.Request) error {
-	product, err := s.store.GetProducts()
+	//product, err := s.store.GetProducts()
+	vars := r.URL.Query()
+	name := vars.Get("name")
+	priceFrom := vars.Get("priceFrom")
+	priceTo := vars.Get("priceTo")
+	skip := vars.Get("skip")
+	limit := vars.Get("limit")
+	if priceFrom == "" {
+		priceFrom = "0"
+	}
+	if priceTo == "" {
+		priceTo = fmt.Sprintf("%f", math.MaxFloat32)
+	}
+	params := map[string]any{"name": name, "priceFrom": priceFrom, "priceTo": priceTo, "skip": skip, "limit": limit}
+	products, err := s.store.SearchProducts(params)
 	if err != nil {
 		return err
 	}
-	return WriteJSON(w, http.StatusOK, product)
+	return WriteJSON(w, http.StatusOK, products)
 }
 
 func (s *APIServer) handleCreateProduct(w http.ResponseWriter, r *http.Request) error {
@@ -217,6 +236,33 @@ func (s *APIServer) handleDeleteProduct(w http.ResponseWriter, r *http.Request) 
 		return err3
 	}
 	return WriteJSON(w, http.StatusOK, map[string]int{"deleted": id})
+}
+
+func (s *APIServer) handleGetNewProducts(w http.ResponseWriter, r *http.Request) error {
+	products, err := s.store.GetNewProducts()
+	if err != nil {
+		return err
+	}
+	return WriteJSON(w, http.StatusOK, products)
+}
+
+func (s *APIServer) handleSearchProduct(w http.ResponseWriter, r *http.Request) error {
+	vars := r.URL.Query()
+	name := vars.Get("name")
+	priceFrom := vars.Get("priceFrom")
+	priceTo := vars.Get("priceTo")
+	if priceFrom == "" {
+		priceFrom = "0"
+	}
+	if priceTo == "" {
+		priceTo = fmt.Sprintf("%f", math.MaxFloat32)
+	}
+	params := map[string]any{"name": name, "priceFrom": priceFrom, "priceTo": priceTo}
+	products, err := s.store.SearchProducts(params)
+	if err != nil {
+		return err
+	}
+	return WriteJSON(w, http.StatusOK, products)
 }
 
 // REVIEW
@@ -317,7 +363,6 @@ func (s *APIServer) handleGetCategory(w http.ResponseWriter, r *http.Request) er
 	return WriteJSON(w, http.StatusOK, caregories)
 }
 
-
 // MISC
 
 func WriteJSON(w http.ResponseWriter, status int, v any) error {
@@ -358,14 +403,4 @@ func getID(r *http.Request) (int, error) {
 		return id, fmt.Errorf("invalid id given %s", idStr)
 	}
 	return id, nil
-}
-
-// ADDITIONAL ROUTES
-
-func  (s *APIServer) handleGetNewProducts(w http.ResponseWriter, r *http.Request) error {
-	products, err := s.store.GetNewProducts()
-	if err != nil {
-		return err
-	}
-	return WriteJSON(w, http.StatusOK, products)
 }
