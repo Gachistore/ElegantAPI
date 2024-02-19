@@ -3,10 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	 jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"strconv"
 )
 
@@ -14,7 +16,7 @@ func (s *APIServer) Run() {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/accounts", makeHTTPHandleFunc(s.handleAccount))
-	router.HandleFunc("/accounts/{id}", makeHTTPHandleFunc(s.handleGetAccountByID))
+	router.HandleFunc("/accounts/{id}", withJWTAuth(makeHTTPHandleFunc(s.handleGetAccountByID)))
 
 	router.HandleFunc("/products", makeHTTPHandleFunc(s.handleProduct))
 	router.HandleFunc("/products/{id}", makeHTTPHandleFunc(s.handleGetProductByID))
@@ -105,6 +107,11 @@ func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) 
 	if err := s.store.CreateAccount(account); err != nil {
 		return err
 	}
+
+	//tokenString, err := createJWT(account)
+	//if err != nil {
+	//	return err
+	//}
 	return WriteJSON(w, http.StatusOK, account)
 }
 func (s *APIServer) handleDeleteAccount(w http.ResponseWriter, r *http.Request) error {
@@ -141,6 +148,9 @@ func (s *APIServer) handleGetProductByID(w http.ResponseWriter, r *http.Request)
 	idStr := mux.Vars(r)["id"]
 	if idStr == "categories" {
 		return s.handleGetCategory(w, r)
+	}
+	if idStr == "reviews" {
+		return s.handleGetReview(w, r)
 	}
 	//if strings.HasPrefix(idStr, "search") {
 	//	return s.handleSearchProduct(w, r)
@@ -370,6 +380,36 @@ func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	w.WriteHeader(status)
 
 	return json.NewEncoder(w).Encode(v)
+}
+
+//func createJWT(account *Account) (*jwt.Token, error){
+//
+//}
+
+func withJWTAuth(handlerFunc http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request){
+		fmt.Println("calling JWT auth middleware")
+
+		tokenString := r.Header.Get("x-jwt-token")
+
+		_, err := validateJWT(tokenString)
+		if err!= nil {
+			WriteJSON(w, http.StatusForbidden, ApiError{Error: "invalid token"})
+			return
+		}
+		handlerFunc(w, r)
+	}
+}
+const jwtSecret = "balls"
+
+func validateJWT(tokenString string) (*jwt.Token, error) {
+	secret := os.Getenv("JWT_SECRET")
+	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected string method: %v", token.Header["alg"])
+		}
+		return []byte(secret), nil
+	})
 }
 
 type APIServer struct {
