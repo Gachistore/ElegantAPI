@@ -1,8 +1,7 @@
-INSERT INTO account (first_name, last_name, e_mail)
+INSERT INTO account (number, first_name, last_name, e_mail, encrypted_password)
 VALUES
-    ('Anna', 'Ivanova', 'anna.ivanova@example.com'),
-    ('Peter', 'Petrov', 'peter.petrov@example.com'),
-    ('Elena', 'Sidorova', 'elena.sidorova@example.com');
+    (1,'Admin', 'Cool', 'adm@cool', '1337'),
+
 
 -- Populating the product table
 INSERT INTO product (name, price, measurements, description, packaging)

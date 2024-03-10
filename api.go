@@ -3,8 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	 jwt "github.com/golang-jwt/jwt/v5"
+	jwt "github.com/golang-jwt/jwt"
 	"github.com/gorilla/mux"
+	"golang.org/x/crypto/bcrypt"
 	"log"
 	"math"
 	"net/http"
@@ -15,8 +16,10 @@ import (
 func (s *APIServer) Run() {
 	router := mux.NewRouter()
 
-	router.HandleFunc("/accounts", makeHTTPHandleFunc(s.handleAccount))
-	router.HandleFunc("/accounts/{id}", withJWTAuth(makeHTTPHandleFunc(s.handleGetAccountByID)))
+	router.HandleFunc("/login", makeHTTPHandleFunc(s.handleLogin))
+
+	router.HandleFunc("/accounts", adminMiddleware(makeHTTPHandleFunc(s.handleAccount)))
+	router.HandleFunc("/accounts/{id}", adminMiddleware(makeHTTPHandleFunc(s.handleGetAccountByID)))
 
 	router.HandleFunc("/products", makeHTTPHandleFunc(s.handleProduct))
 	router.HandleFunc("/products/{id}", makeHTTPHandleFunc(s.handleGetProductByID))
@@ -31,6 +34,35 @@ func (s *APIServer) Run() {
 	log.Println("JSON API server running on port: ", s.listenAddr)
 
 	http.ListenAndServe(s.listenAddr, router)
+}
+
+func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != "POST" {
+		return fmt.Errorf("method not allowed %s", r.Method)
+	}
+
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return err
+	}
+	acc, err := s.store.GetAccountByEmail(req.Email)
+	if err != nil {
+		return err
+	}
+	if !acc.ValidPassword(req.Password) {
+		fmt.Errorf("not authenticated")
+	}
+	token, err := createJWT(acc)
+	if err != nil {
+		return err
+	}
+	resp := LoginResponse{
+		ID:    acc.ID,
+		Token: token,
+	}
+
+	fmt.Println(acc)
+	return WriteJSON(w, http.StatusOK, resp)
 }
 
 //ACCOUNT
@@ -102,16 +134,16 @@ func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) 
 	if err := json.NewDecoder(r.Body).Decode(createAccountReq); err != nil {
 		return err
 	}
-
-	account := NewAccount(createAccountReq.FirstName, createAccountReq.LastName, createAccountReq.Email)
+	account, err := NewAccount(createAccountReq.FirstName, createAccountReq.LastName, createAccountReq.Email,
+		createAccountReq.Password, UserTypeRegular)
+	if err != nil {
+		return err
+	}
 	if err := s.store.CreateAccount(account); err != nil {
 		return err
 	}
+	fmt.Println(account)
 
-	//tokenString, err := createJWT(account)
-	//if err != nil {
-	//	return err
-	//}
 	return WriteJSON(w, http.StatusOK, account)
 }
 func (s *APIServer) handleDeleteAccount(w http.ResponseWriter, r *http.Request) error {
@@ -382,26 +414,81 @@ func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
-//func createJWT(account *Account) (*jwt.Token, error){
-//
-//}
+func createJWT(account *Account) (string, error) {
+	claims := &jwt.MapClaims{
+		"expiresAt": 15000,
+		"accountID": account.ID,
+		"userType":  account.UserType,
+	}
+	secret := os.Getenv("JWT_SECRET")
+	fmt.Println(claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	str, err := token.SignedString([]byte(secret))
+	return str, err
+}
 
-func withJWTAuth(handlerFunc http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request){
-		fmt.Println("calling JWT auth middleware")
+// eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2NvdW50SUQiOjAsImV4cGlyZXNBdCI6MTUwMDB9.ay8oKekspEOaX0J1dSLolWnr3GM1_gvFvos632XG144
+func permissionDenied(w http.ResponseWriter) {
+	WriteJSON(w, http.StatusForbidden, ApiError{Error: "permission denied"})
+}
+func adminMiddleware(handlerFunc http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		//fmt.Println("calling JWT auth middleware")
 
 		tokenString := r.Header.Get("x-jwt-token")
 
-		_, err := validateJWT(tokenString)
-		if err!= nil {
-			WriteJSON(w, http.StatusForbidden, ApiError{Error: "invalid token"})
+		token, err := validateJWT(tokenString)
+		if err != nil {
+			permissionDenied(w)
+			return
+		}
+		if !token.Valid {
+			permissionDenied(w)
+			return
+		}
+
+		claims := token.Claims.(jwt.MapClaims)
+
+		if claims["userType"] != string(UserTypeAdmin) {
+			permissionDenied(w)
 			return
 		}
 		handlerFunc(w, r)
 	}
 }
-const jwtSecret = "balls"
+func userMiddleware(handlerFunc http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("calling JWT auth middleware")
 
+		tokenString := r.Header.Get("x-jwt-token")
+
+		token, err := validateJWT(tokenString)
+		if err != nil {
+			permissionDenied(w)
+		}
+		if !token.Valid {
+			permissionDenied(w)
+			return
+		}
+		//id, err := getID(r)
+		//if err != nil {
+		//	permissionDenied(w)
+		//	fmt.Println(id)
+		//	return
+		//}
+		//account, err := s.GetAccountByID(id)
+		//if err != nil {
+		//	permissionDenied(w)
+		//	return
+		//}
+		claims := token.Claims.(jwt.MapClaims)
+		//if int(claims["accountID"].(float64)) == account.ID {
+		//	permissionDenied(w)
+		//}
+		fmt.Println(claims)
+		handlerFunc(w, r)
+	}
+}
 func validateJWT(tokenString string) (*jwt.Token, error) {
 	secret := os.Getenv("JWT_SECRET")
 	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
@@ -443,4 +530,8 @@ func getID(r *http.Request) (int, error) {
 		return id, fmt.Errorf("invalid id given %s", idStr)
 	}
 	return id, nil
+}
+
+func (acc *Account) ValidPassword(pw string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(acc.EncryptedPassword), []byte(pw)) == nil
 }

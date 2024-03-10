@@ -1,10 +1,23 @@
 package main
 
+import (
+	"golang.org/x/crypto/bcrypt"
+)
+
+type UserType string
+
+const (
+	UserTypeRegular UserType = "Regular"
+	UserTypeAdmin   UserType = "Admin"
+)
+
 type Account struct {
-	ID        int    `json:"id"`
-	FirstName string `json:"firstName"`
-	LastName  string `json:"lastName"`
-	Email     string `json:"email"`
+	ID                int      `json:"id"`
+	FirstName         string   `json:"firstName"`
+	LastName          string   `json:"lastName"`
+	Email             string   `json:"email"`
+	EncryptedPassword string   `json:"-"`
+	UserType          UserType `json:"userType"`
 }
 
 type Product struct {
@@ -28,10 +41,18 @@ type Review struct {
 	Text        string  `json:"text"`
 }
 
-func NewAccount(firstName, lastName, email string) *Account {
-	return &Account{FirstName: firstName,
-		LastName: lastName,
-		Email:    email}
+func NewAccount(firstName, lastName, email, password string, userType UserType) (*Account, error) {
+	encpw, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+	return &Account{
+		FirstName:         firstName,
+		LastName:          lastName,
+		Email:             email,
+		EncryptedPassword: string(encpw),
+		UserType:          userType,
+	}, nil
 }
 
 func NewReview(accId, prodID int, ratingGiven float64, text string) *Review {
@@ -54,9 +75,11 @@ func NewProduct(name string, price float64, measurements, description, packaging
 }
 
 type CreateAccountRequest struct {
-	FirstName string `json:"firstName"`
-	LastName  string `json:"lastName"`
-	Email     string `json:"email"`
+	FirstName string   `json:"firstName"`
+	LastName  string   `json:"lastName"`
+	Email     string   `json:"email"`
+	Password  string   `json:"password"`
+	UserType  UserType `json:"userType"`
 }
 
 type CreateProductRequest struct {
@@ -76,4 +99,14 @@ type CreateReviewRequest struct {
 
 type CreateCategoryRequest struct {
 	Name string `json:"name"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type LoginResponse struct {
+	ID    int    `json:"id"`
+	Token string `json:"token"`
 }
