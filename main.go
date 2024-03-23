@@ -11,7 +11,7 @@ func seedAccount(store Storage, fname, lname, email, pw string, userType UserTyp
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := store.CreateAccount(acc); err != nil {
+	if _, err := store.CreateAccount(acc); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("new account ", acc)

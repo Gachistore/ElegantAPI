@@ -7,7 +7,7 @@ import (
 )
 
 type Storage interface {
-	CreateAccount(*Account) error
+	CreateAccount(*Account) (int, error)
 	DeleteAccount(int) error
 	UpdateAccount(int, *Account) error
 	GetAccounts() ([]*Account, error)
@@ -27,6 +27,12 @@ type Storage interface {
 	UpdateReview(int, *Review) error
 	GetReviews() ([]*Review, error)
 	GetReviewByID(int) (*Review, error)
+
+	CreateCart(*Cart) error
+	UpdateProductQuantityInCart(int, int, int) error
+	DeleteProductFromCart(int, int) error
+	GetCartProductsByUserID(int) ([]*ProductCart, error)
+	AddProductToCart(int, int, int) error
 
 	GetCategories() ([]*Category, error)
 }
@@ -58,6 +64,8 @@ func (s *PostgresStore) Init() []error {
 	errors = append(errors, s.CreateCategoryTable())
 	errors = append(errors, s.CreateProductCategoryTable())
 	errors = append(errors, s.CreateProductReviewTable())
+	errors = append(errors, s.CreateCartTable())
+	errors = append(errors, s.CreateCartProductTable())
 	return errors
 }
 
@@ -75,22 +83,23 @@ func (s *PostgresStore) CreateAccountTable() error {
 	return err
 }
 
-func (s *PostgresStore) CreateAccount(acc *Account) error {
+func (s *PostgresStore) CreateAccount(acc *Account) (int, error) {
 	query := `insert into account (first_name, last_name, e_mail, encrypted_password, user_type)
-								   values ($1, $2, $3, $4, $5)`
-	resp, err := s.db.Query(query,
+								   values ($1, $2, $3, $4, $5) returning id`
+	var id int
+	err := s.db.QueryRow(query,
 		acc.FirstName,
 		acc.LastName,
 		acc.Email,
 		acc.EncryptedPassword,
 		acc.UserType,
-	)
+	).Scan(&id)
 
 	if err != nil {
-		return err
+		return 0, err
 	}
-	fmt.Printf("%+v\n", resp)
-	return nil
+
+	return id, nil
 }
 
 func (s *PostgresStore) GetAccountByEmail(email string) (*Account, error) {
@@ -111,7 +120,20 @@ func (s *PostgresStore) UpdateAccount(id int, account *Account) error {
 }
 
 func (s *PostgresStore) DeleteAccount(id int) error {
-	_, err := s.db.Query(`delete from account where id = $1`, id)
+	cart, err := s.getCartByUserID(id)
+	cartID := cart.CartID
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Query(`delete from cart_product where cart_id = $1`, cartID)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Query(`delete from cart where id = $1`, cartID)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Query(`delete from account where id = $1`, id)
 	return err
 }
 
@@ -396,6 +418,119 @@ func scanIntoCategory(rows *sql.Rows) (*Category, error) {
 	return category, err
 }
 
+//CART
+
+func (s *PostgresStore) CreateCart(cart *Cart) error {
+	query := `insert into cart (user_id) values ($1)`
+	resp, err := s.db.Query(query,
+		cart.UserID,
+	)
+
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%+v\n", resp)
+	return nil
+}
+
+func (s *PostgresStore) AddProductToCart(userID, prodID, quantity int) error {
+	cart, err := s.getCartByUserID(userID)
+	cartID := cart.CartID
+	if err != nil {
+		return err
+	}
+	query := `insert into cart_product (cart_id, product_id, quantity)
+								   values ($1, $2, $3)`
+	resp, err := s.db.Query(query,
+		cartID,
+		prodID,
+		quantity,
+	)
+
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%+v\n", resp)
+	return nil
+
+}
+
+func (s *PostgresStore) UpdateProductQuantityInCart(cartID, prodID, quantity int) error {
+	_, err := s.db.Query(`UPDATE cart_product SET quantity=$3 WHERE cart_id=$1 and product_id=$2 `,
+		cartID, prodID, quantity)
+	return err
+}
+
+func (s *PostgresStore) DeleteProductFromCart(cartID, productID int) error {
+	_, err := s.db.Query(`delete from cart_product where cart_id = $1 and product_id = $2`, cartID, productID)
+	return err
+}
+
+func (s *PostgresStore) getCartByUserID(userID int) (*Cart, error) {
+	rows, err := s.db.Query(`select * from cart where user_id = $1`, userID)
+	if err != nil {
+		return nil, err
+	}
+	cart := new(Cart)
+	for rows.Next() {
+		cart, err = scanIntoCart(rows)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return cart, nil
+}
+
+func (s *PostgresStore) GetCartProductsByUserID(userID int) ([]*ProductCart, error) {
+	cart, err := s.getCartByUserID(userID)
+	var products []*ProductCart
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.db.Query(`select * from cart_product where cart_id = $1`, cart.CartID)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		product, err := s.scanIntoCartProduct(rows)
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, product)
+	}
+	if products != nil {
+		return products, nil
+	}
+	return nil,  fmt.Errorf("%v not found", userID)
+}
+
+
+func scanIntoCart(rows *sql.Rows) (*Cart, error) {
+	cart := new(Cart)
+	err := rows.Scan(
+		&cart.CartID,
+		&cart.UserID,
+	)
+	return cart, err
+}
+
+func (s *PostgresStore) scanIntoCartProduct(rows *sql.Rows) (*ProductCart, error) {
+	prodCart := new(ProductCart)
+	//prod := new(*Product)
+	//prod, err := s.GetProductByID(prodID)
+	err := rows.Scan(
+		&prodCart.CartID,
+		&prodCart.ProdID,
+		&prodCart.Quantity,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return prodCart, nil
+}
+
 // MISC
 
 func (s *PostgresStore) CreateProductCategoryTable() error {
@@ -423,6 +558,28 @@ func (s *PostgresStore) CreateProductReviewTable() error {
 			prodID serial references product(id),
 			reviewID serial references review(id),
 			constraint product_review_pk primary key (prodID, reviewID)
+		)`
+
+	_, err := s.db.Exec(query)
+	return err
+}
+
+func (s *PostgresStore) CreateCartTable() error {
+	query := `create table if not exists cart( 
+			id serial primary key,
+			user_id serial references account(id)			
+		)`
+
+	_, err := s.db.Exec(query)
+	return err
+}
+
+func (s *PostgresStore) CreateCartProductTable() error {
+	query := `create table if not exists cart_product( 
+			cart_id serial references cart(id),
+			product_id serial references product(id),
+    		quantity serial, 
+			constraint cart_product_pk primary key (cart_id, product_id)
 		)`
 
 	_, err := s.db.Exec(query)

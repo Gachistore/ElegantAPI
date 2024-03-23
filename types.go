@@ -41,6 +41,22 @@ type Review struct {
 	Text        string  `json:"text"`
 }
 
+type Cart struct {
+	CartID int `json:"cartID"`
+	UserID int `json:"userID"`
+}
+
+type ProductCart struct {
+	CartID   int      `json:"cartID"`
+	ProdID int `json:"prodID"`
+	Quantity int      `json:"quantity"`
+}
+
+type ProductQuantity struct {
+	Product  *Product `json:"product"`
+	Quantity int      `json:"quantity"`
+}
+
 func NewAccount(firstName, lastName, email, password string, userType UserType) (*Account, error) {
 	encpw, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -74,6 +90,12 @@ func NewProduct(name string, price float64, measurements, description, packaging
 	}
 }
 
+func NewCart(userID int) *Cart {
+	return &Cart{
+		UserID: userID,
+	}
+}
+
 type CreateAccountRequest struct {
 	FirstName string   `json:"firstName"`
 	LastName  string   `json:"lastName"`
@@ -95,6 +117,10 @@ type CreateReviewRequest struct {
 	ProdID      int     `json:"prodID"`
 	RatingGiven float64 `json:"ratingGiven"`
 	Text        string  `json:"text"`
+}
+
+type CreateCartRequest struct {
+	UserID int `json:"userID"`
 }
 
 type CreateCategoryRequest struct {

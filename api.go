@@ -31,6 +31,8 @@ func (s *APIServer) Run() {
 	router.HandleFunc("/products/categories", makeHTTPHandleFunc(s.handleGetCategory))
 	//router.HandleFunc("/products/search", makeHTTPHandleFunc(s.handleSearchProduct))
 
+	router.HandleFunc("/carts/{id}", makeHTTPHandleFunc(s.HandleCart))
+
 	log.Println("JSON API server running on port: ", s.listenAddr)
 
 	http.ListenAndServe(s.listenAddr, router)
@@ -131,17 +133,30 @@ func (s *APIServer) handleGetAccount(w http.ResponseWriter, r *http.Request) err
 
 func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) error {
 	createAccountReq := new(CreateAccountRequest)
+	//createCartReq := new(CreateCartRequest)
 	if err := json.NewDecoder(r.Body).Decode(createAccountReq); err != nil {
 		return err
 	}
 	account, err := NewAccount(createAccountReq.FirstName, createAccountReq.LastName, createAccountReq.Email,
 		createAccountReq.Password, UserTypeRegular)
+	//if err := json.NewDecoder(r.Body).Decode(createCartReq); err != nil {
+	//	return err
+	//}
+
 	if err != nil {
 		return err
 	}
-	if err := s.store.CreateAccount(account); err != nil {
+	id, err := s.store.CreateAccount(account)
+	if err != nil {
 		return err
 	}
+	account.ID = id
+	cart := NewCart(id)
+	if err := s.store.CreateCart(cart); err != nil {
+		return err
+	}
+	println(id)
+	println(cart.UserID, cart.CartID)
 	fmt.Println(account)
 
 	return WriteJSON(w, http.StatusOK, account)
@@ -405,7 +420,99 @@ func (s *APIServer) handleGetCategory(w http.ResponseWriter, r *http.Request) er
 	return WriteJSON(w, http.StatusOK, caregories)
 }
 
+// CART
+
+func (s *APIServer) HandleCart(w http.ResponseWriter, r *http.Request) error {
+
+	if r.Method == "GET" {
+		return s.handleGetCart(w, r)
+	}
+	if r.Method == "POST" {
+		return s.handleAddProductToCart(w, r)
+	}
+	if r.Method == "PUT" {
+		return s.handleUpdateProductQuantityInCart(w, r)
+	}
+	return fmt.Errorf("method not allowed %s", r.Method)
+
+}
+
+func (s *APIServer) handleGetCart(w http.ResponseWriter, r *http.Request) error {
+	id, err := getID(r)
+	if err != nil {
+		return err
+	}
+
+	prodQuantities := []*ProductQuantity{} // Создаем слайс для хранения пар продукт-количество
+
+	carts, err := s.store.GetCartProductsByUserID(id)
+	if err != nil {
+		return err
+	}
+
+	for _, cart := range carts {
+		prod, err := s.store.GetProductByID(cart.ProdID)
+		if err != nil {
+			return err
+		}
+		prodQuantity := &ProductQuantity{
+			Product:  prod,
+			Quantity: cart.Quantity,
+		}
+		prodQuantities = append(prodQuantities, prodQuantity)
+	}
+
+	return WriteJSON(w, http.StatusOK, prodQuantities) // Возвращаем слайс вместо карты
+}
+
+func (s *APIServer) handleAddProductToCart(w http.ResponseWriter, r *http.Request) error {
+	cartID, err := getID(r)
+	vars := r.URL.Query()
+	prodID, err := strconv.Atoi(vars.Get("prodID"))
+	if err != nil {
+		return err
+	}
+	quantity, err := strconv.Atoi(vars.Get("quantity"))
+	if err != nil {
+		return err
+	}
+	err = s.store.AddProductToCart(cartID, prodID, quantity)
+	if err != nil {
+		return err
+	}
+	return WriteJSON(w, http.StatusOK, map[string]int {"added: ": prodID})
+}
+
+func (s *APIServer) handleUpdateProductQuantityInCart(w http.ResponseWriter, r *http.Request) error {
+	cartID, err := getID(r)
+	if err != nil {
+		return err
+	}
+	vars := r.URL.Query()
+	prodID, err := strconv.Atoi(vars.Get("prodID"))
+	if err != nil {
+		return err
+	}
+	quantity, err := strconv.Atoi(vars.Get("quantity"))
+	if err != nil {
+		return err
+	}
+	if err := s.store.UpdateProductQuantityInCart(cartID, prodID, quantity); err != nil{
+		return err
+	}
+	return WriteJSON(w, http.StatusOK, map[string]int {"updated": prodID})
+}
+
 // MISC
+
+func (p Product) String() string {
+	// Преобразование структуры в JSON-строку
+	jsonData, err := json.Marshal(p)
+	if err != nil {
+		return fmt.Sprintf("Ошибка при преобразовании в JSON: %v", err)
+	}
+	return string(jsonData)
+}
 
 func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	w.Header().Add("Content-Type", "application/json")
