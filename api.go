@@ -31,7 +31,7 @@ func (s *APIServer) Run() {
 	router.HandleFunc("/products/categories", makeHTTPHandleFunc(s.handleGetCategory))
 	//router.HandleFunc("/products/search", makeHTTPHandleFunc(s.handleSearchProduct))
 
-	router.HandleFunc("/carts/{id}", makeHTTPHandleFunc(s.HandleCart))
+	router.HandleFunc("/carts/{id}", userMiddleware(makeHTTPHandleFunc(s.HandleCart)))
 
 	log.Println("JSON API server running on port: ", s.listenAddr)
 
@@ -480,7 +480,7 @@ func (s *APIServer) handleAddProductToCart(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		return err
 	}
-	return WriteJSON(w, http.StatusOK, map[string]int {"added: ": prodID})
+	return WriteJSON(w, http.StatusOK, map[string]int{"added: ": prodID})
 }
 
 func (s *APIServer) handleUpdateProductQuantityInCart(w http.ResponseWriter, r *http.Request) error {
@@ -497,10 +497,10 @@ func (s *APIServer) handleUpdateProductQuantityInCart(w http.ResponseWriter, r *
 	if err != nil {
 		return err
 	}
-	if err := s.store.UpdateProductQuantityInCart(cartID, prodID, quantity); err != nil{
+	if err := s.store.UpdateProductQuantityInCart(cartID, prodID, quantity); err != nil {
 		return err
 	}
-	return WriteJSON(w, http.StatusOK, map[string]int {"updated": prodID})
+	return WriteJSON(w, http.StatusOK, map[string]int{"updated": prodID})
 }
 
 // MISC
@@ -534,13 +534,13 @@ func createJWT(account *Account) (string, error) {
 	return str, err
 }
 
-// eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2NvdW50SUQiOjAsImV4cGlyZXNBdCI6MTUwMDB9.ay8oKekspEOaX0J1dSLolWnr3GM1_gvFvos632XG144
 func permissionDenied(w http.ResponseWriter) {
 	WriteJSON(w, http.StatusForbidden, ApiError{Error: "permission denied"})
 }
+
 func adminMiddleware(handlerFunc http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		//fmt.Println("calling JWT auth middleware")
+		fmt.Println("calling JWT auth middleware")
 
 		tokenString := r.Header.Get("x-jwt-token")
 
@@ -560,9 +560,11 @@ func adminMiddleware(handlerFunc http.HandlerFunc) http.HandlerFunc {
 			permissionDenied(w)
 			return
 		}
+
 		handlerFunc(w, r)
 	}
 }
+
 func userMiddleware(handlerFunc http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("calling JWT auth middleware")
@@ -572,26 +574,29 @@ func userMiddleware(handlerFunc http.HandlerFunc) http.HandlerFunc {
 		token, err := validateJWT(tokenString)
 		if err != nil {
 			permissionDenied(w)
+			return
 		}
 		if !token.Valid {
 			permissionDenied(w)
 			return
 		}
-		//id, err := getID(r)
-		//if err != nil {
-		//	permissionDenied(w)
-		//	fmt.Println(id)
-		//	return
-		//}
-		//account, err := s.GetAccountByID(id)
-		//if err != nil {
-		//	permissionDenied(w)
-		//	return
-		//}
+		id, err := getID(r)
+		if err != nil {
+			permissionDenied(w)
+			fmt.Println(id)
+			return
+		}
 		claims := token.Claims.(jwt.MapClaims)
-		//if int(claims["accountID"].(float64)) == account.ID {
-		//	permissionDenied(w)
-		//}
+		if int(claims["accountID"].(float64)) != id {
+			permissionDenied(w)
+			return
+		}
+
+		if claims["userType"] != string(UserTypeRegular) {
+			permissionDenied(w)
+			return
+		}
+
 		fmt.Println(claims)
 		handlerFunc(w, r)
 	}
