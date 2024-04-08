@@ -1,4 +1,4 @@
-package main
+package types
 
 import (
 	"golang.org/x/crypto/bcrypt"
@@ -100,8 +100,8 @@ type CreateAccountRequest struct {
 	FirstName string   `json:"firstName"`
 	LastName  string   `json:"lastName"`
 	Email     string   `json:"email"`
-	Password  string   `json:"password"`
-	UserType  UserType `json:"userType"`
+	Password string   `json:"password"`
+	UserType UserType `json:"userType"`
 }
 
 type CreateProductRequest struct {
@@ -135,4 +135,8 @@ type LoginRequest struct {
 type LoginResponse struct {
 	ID    int    `json:"id"`
 	Token string `json:"token"`
+}
+
+func (acc *Account) ValidPassword(pw string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(acc.EncryptedPassword), []byte(pw)) == nil
 }

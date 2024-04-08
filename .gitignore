@@ -1,0 +1,15 @@
+# Compiled Object files, Static and Dynamic libs (Shared Objects)
+*.o
+*.a
+*.so
+
+# Executables
+*.exe
+*.out
+
+# Dependency directories
+vendor/
+.idea/
+
+# Go binary
+go.sum

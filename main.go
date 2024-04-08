@@ -1,13 +1,16 @@
 package main
 
 import (
+	"3legant/api"
+	"3legant/storage"
+	"3legant/types"
 	"flag"
 	"fmt"
 	"log"
 )
 
-func seedAccount(store Storage, fname, lname, email, pw string, userType UserType) *Account {
-	acc, err := NewAccount(fname, lname, email, pw, userType)
+func seedAccount(store storage.Storage, fname, lname, email, pw string, userType types.UserType) *types.Account {
+	acc, err := types.NewAccount(fname, lname, email, pw, userType)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -18,15 +21,15 @@ func seedAccount(store Storage, fname, lname, email, pw string, userType UserTyp
 	return acc
 }
 
-func seedAccounts(store Storage) {
-	seedAccount(store, "a", "b", "a@b.com", "1337", UserTypeAdmin)
-	seedAccount(store, "c", "d", "c@d.com", "1337", UserTypeRegular)
+func seedAccounts(store storage.Storage) {
+	seedAccount(store, "a", "b", "a@b.com", "1337", types.UserTypeAdmin)
+	seedAccount(store, "c", "d", "c@d.com", "1337", types.UserTypeRegular)
 }
 
 func main() {
 	seed := flag.Bool("seed", false, "seed the db")
 	flag.Parse()
-	store, err := NewPostgresStore()
+	store, err := storage.NewPostgresStore()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -41,6 +44,6 @@ func main() {
 		seedAccounts(store)
 	}
 
-	server := newAPIServer(":3000", store)
+	server := api.NewAPIServer(":3000", store)
 	server.Run()
 }

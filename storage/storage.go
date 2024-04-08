@@ -1,40 +1,41 @@
-package main
+package storage
 
 import (
+	"3legant/types"
 	"database/sql"
 	"fmt"
 	_ "github.com/lib/pq"
 )
 
 type Storage interface {
-	CreateAccount(*Account) (int, error)
+	CreateAccount(*types.Account) (int, error)
+	GetAccountByID(int) (*types.Account, error)
+	GetAccounts() ([]*types.Account, error)
+	GetAccountByEmail(string) (*types.Account, error)
 	DeleteAccount(int) error
-	UpdateAccount(int, *Account) error
-	GetAccounts() ([]*Account, error)
-	GetAccountByEmail(string) (*Account, error)
-	GetAccountByID(int) (*Account, error)
+	UpdateAccount(int, *types.Account) error
 
-	CreateProduct(*Product) error
+	CreateProduct(*types.Product) error
 	DeleteProduct(int) (error, error, error)
-	UpdateProduct(int, *Product) error
-	GetProducts() ([]*Product, error)
-	GetProductByID(int) (*Product, error)
-	GetNewProducts() ([]*Product, error)
-	SearchProducts(map[string]any) ([]*Product, error)
+	UpdateProduct(int, *types.Product) error
+	GetProducts() ([]*types.Product, error)
+	GetProductByID(int) (*types.Product, error)
+	GetNewProducts() ([]*types.Product, error)
+	SearchProducts(map[string]any) ([]*types.Product, error)
 
-	CreateReview(*Review) error
+	CreateReview(*types.Review) error
 	DeleteReview(int) error
-	UpdateReview(int, *Review) error
-	GetReviews() ([]*Review, error)
-	GetReviewByID(int) (*Review, error)
+	UpdateReview(int, *types.Review) error
+	GetReviews() ([]*types.Review, error)
+	GetReviewByID(int) (*types.Review, error)
 
-	CreateCart(*Cart) error
+	CreateCart(*types.Cart) error
 	UpdateProductQuantityInCart(int, int, int) error
 	DeleteProductFromCart(int, int) error
-	GetCartProductsByUserID(int) ([]*ProductCart, error)
+	GetCartProductsByUserID(int) ([]*types.ProductCart, error)
 	AddProductToCart(int, int, int) error
 
-	GetCategories() ([]*Category, error)
+	GetCategories() ([]*types.Category, error)
 }
 
 type PostgresStore struct {
@@ -83,7 +84,7 @@ func (s *PostgresStore) CreateAccountTable() error {
 	return err
 }
 
-func (s *PostgresStore) CreateAccount(acc *Account) (int, error) {
+func (s *PostgresStore) CreateAccount(acc *types.Account) (int, error) {
 	query := `insert into account (first_name, last_name, e_mail, encrypted_password, user_type)
 								   values ($1, $2, $3, $4, $5) returning id`
 	var id int
@@ -102,7 +103,7 @@ func (s *PostgresStore) CreateAccount(acc *Account) (int, error) {
 	return id, nil
 }
 
-func (s *PostgresStore) GetAccountByEmail(email string) (*Account, error) {
+func (s *PostgresStore) GetAccountByEmail(email string) (*types.Account, error) {
 	rows, err := s.db.Query(`select * from account where e_mail = $1`, email)
 	if err != nil {
 		return nil, err
@@ -113,7 +114,7 @@ func (s *PostgresStore) GetAccountByEmail(email string) (*Account, error) {
 	return nil, fmt.Errorf("account with email %s not found", email)
 }
 
-func (s *PostgresStore) UpdateAccount(id int, account *Account) error {
+func (s *PostgresStore) UpdateAccount(id int, account *types.Account) error {
 	_, err := s.db.Query(`UPDATE account SET first_name=$2, last_name=$3, e_mail=$4 WHERE id=$1`,
 		id, account.FirstName, account.LastName, account.Email)
 	return err
@@ -137,7 +138,7 @@ func (s *PostgresStore) DeleteAccount(id int) error {
 	return err
 }
 
-func (s *PostgresStore) GetAccountByID(id int) (*Account, error) {
+func (s *PostgresStore) GetAccountByID(id int) (*types.Account, error) {
 	rows, err := s.db.Query(`select * from account where id = $1`, id)
 	if err != nil {
 		return nil, err
@@ -148,12 +149,12 @@ func (s *PostgresStore) GetAccountByID(id int) (*Account, error) {
 	return nil, fmt.Errorf("account %d not found", id)
 }
 
-func (s *PostgresStore) GetAccounts() ([]*Account, error) {
+func (s *PostgresStore) GetAccounts() ([]*types.Account, error) {
 	rows, err := s.db.Query(`select * from account`)
 	if err != nil {
 		return nil, err
 	}
-	accounts := []*Account{}
+	accounts := []*types.Account{}
 	for rows.Next() {
 		account, err := scanIntoAccount(rows)
 		if err != nil {
@@ -165,8 +166,8 @@ func (s *PostgresStore) GetAccounts() ([]*Account, error) {
 	return accounts, nil
 }
 
-func scanIntoAccount(rows *sql.Rows) (*Account, error) {
-	account := new(Account)
+func scanIntoAccount(rows *sql.Rows) (*types.Account, error) {
+	account := new(types.Account)
 	err := rows.Scan(
 		&account.ID,
 		&account.FirstName,
@@ -194,7 +195,7 @@ func (s *PostgresStore) CreateProductTable() error {
 	return err
 }
 
-func (s *PostgresStore) CreateProduct(product *Product) error {
+func (s *PostgresStore) CreateProduct(product *types.Product) error {
 
 	query := `insert into product
     		(name, price, measurements, description, packaging)
@@ -213,8 +214,8 @@ func (s *PostgresStore) CreateProduct(product *Product) error {
 	return nil
 }
 
-func scanIntoProduct(rows *sql.Rows) (*Product, error) {
-	product := new(Product)
+func scanIntoProduct(rows *sql.Rows) (*types.Product, error) {
+	product := new(types.Product)
 	err := rows.Scan(
 		&product.ID,
 		&product.Name,
@@ -225,7 +226,7 @@ func scanIntoProduct(rows *sql.Rows) (*Product, error) {
 	return product, err
 }
 
-func (s *PostgresStore) UpdateProduct(id int, product *Product) error {
+func (s *PostgresStore) UpdateProduct(id int, product *types.Product) error {
 	_, err := s.db.Query(`update product set name=$2, price=$3, measurements=$4, description=$5, packaging=$6 WHERE id=$1`,
 		id, product.Name, product.Price, product.Measurements, product.Description, product.Packaging)
 	return err
@@ -238,7 +239,7 @@ func (s *PostgresStore) DeleteProduct(id int) (error, error, error) {
 	return err1, err2, err3
 }
 
-func (s *PostgresStore) GetProductByID(id int) (*Product, error) {
+func (s *PostgresStore) GetProductByID(id int) (*types.Product, error) {
 	rows, err := s.db.Query(`select * from product where id = $1`, id)
 	if err != nil {
 		return nil, err
@@ -249,13 +250,13 @@ func (s *PostgresStore) GetProductByID(id int) (*Product, error) {
 	return nil, fmt.Errorf("product %d not found", id)
 }
 
-func (s *PostgresStore) GetProducts() ([]*Product, error) {
+func (s *PostgresStore) GetProducts() ([]*types.Product, error) {
 	rows, err := s.db.Query(`select * from product`)
 	if err != nil {
 		return nil, err
 	}
 
-	products := []*Product{}
+	products := []*types.Product{}
 	for rows.Next() {
 		product, err := scanIntoProduct(rows)
 		if err != nil {
@@ -267,12 +268,12 @@ func (s *PostgresStore) GetProducts() ([]*Product, error) {
 	return products, nil
 }
 
-func (s *PostgresStore) GetNewProducts() ([]*Product, error) {
+func (s *PostgresStore) GetNewProducts() ([]*types.Product, error) {
 	rows, err := s.db.Query(`select * from product order by id desc limit 5`)
 	if err != nil {
 		return nil, err
 	}
-	products := []*Product{}
+	products := []*types.Product{}
 	for rows.Next() {
 		product, err := scanIntoProduct(rows)
 		if err != nil {
@@ -283,7 +284,7 @@ func (s *PostgresStore) GetNewProducts() ([]*Product, error) {
 	return products, nil
 }
 
-func (s *PostgresStore) SearchProducts(params map[string]any) ([]*Product, error) {
+func (s *PostgresStore) SearchProducts(params map[string]any) ([]*types.Product, error) {
 	name := AnyToStr(params["name"])
 	name = "%" + name + "%"
 	priceFrom := params["priceFrom"]
@@ -301,7 +302,7 @@ func (s *PostgresStore) SearchProducts(params map[string]any) ([]*Product, error
 	if err != nil {
 		return nil, err
 	}
-	products := []*Product{}
+	products := []*types.Product{}
 	for rows.Next() {
 		product, err := scanIntoProduct(rows)
 		if err != nil {
@@ -327,7 +328,7 @@ func (s *PostgresStore) CreateReviewTable() error {
 	return err
 }
 
-func (s *PostgresStore) CreateReview(rev *Review) error {
+func (s *PostgresStore) CreateReview(rev *types.Review) error {
 	query := `insert into review (accID, prodID, rating_given, text)
 								   values ($1, $2, $3, $4)`
 	resp, err := s.db.Query(query,
@@ -343,7 +344,7 @@ func (s *PostgresStore) CreateReview(rev *Review) error {
 	return nil
 }
 
-func (s *PostgresStore) UpdateReview(id int, review *Review) error {
+func (s *PostgresStore) UpdateReview(id int, review *types.Review) error {
 	_, err := s.db.Query(`UPDATE review SET rating_given=$2, text=$3 WHERE id=$1`,
 		id, review.RatingGiven, review.Text)
 	return err
@@ -355,7 +356,7 @@ func (s *PostgresStore) DeleteReview(id int) error {
 	return err
 }
 
-func (s *PostgresStore) GetReviewByID(id int) (*Review, error) {
+func (s *PostgresStore) GetReviewByID(id int) (*types.Review, error) {
 	rows, err := s.db.Query(`select * from review where id = $1`, id)
 	if err != nil {
 		return nil, err
@@ -366,12 +367,12 @@ func (s *PostgresStore) GetReviewByID(id int) (*Review, error) {
 	return nil, fmt.Errorf("review %d not found", id)
 }
 
-func (s *PostgresStore) GetReviews() ([]*Review, error) {
+func (s *PostgresStore) GetReviews() ([]*types.Review, error) {
 	rows, err := s.db.Query(`select * from review`)
 	if err != nil {
 		return nil, err
 	}
-	reviews := []*Review{}
+	reviews := []*types.Review{}
 	for rows.Next() {
 		review, err := scanIntoReview(rows)
 		if err != nil {
@@ -382,8 +383,8 @@ func (s *PostgresStore) GetReviews() ([]*Review, error) {
 	return reviews, nil
 }
 
-func scanIntoReview(rows *sql.Rows) (*Review, error) {
-	review := new(Review)
+func scanIntoReview(rows *sql.Rows) (*types.Review, error) {
+	review := new(types.Review)
 	err := rows.Scan(
 		&review.ID,
 		&review.AccID,
@@ -395,12 +396,12 @@ func scanIntoReview(rows *sql.Rows) (*Review, error) {
 
 // CATEGORY
 
-func (s *PostgresStore) GetCategories() ([]*Category, error) {
+func (s *PostgresStore) GetCategories() ([]*types.Category, error) {
 	rows, err := s.db.Query(`select * from category`)
 	if err != nil {
 		return nil, err
 	}
-	categories := []*Category{}
+	categories := []*types.Category{}
 	for rows.Next() {
 		category, err := scanIntoCategory(rows)
 		if err != nil {
@@ -411,8 +412,8 @@ func (s *PostgresStore) GetCategories() ([]*Category, error) {
 	return categories, nil
 }
 
-func scanIntoCategory(rows *sql.Rows) (*Category, error) {
-	category := new(Category)
+func scanIntoCategory(rows *sql.Rows) (*types.Category, error) {
+	category := new(types.Category)
 	err := rows.Scan(
 		&category.Name)
 	return category, err
@@ -420,7 +421,7 @@ func scanIntoCategory(rows *sql.Rows) (*Category, error) {
 
 //CART
 
-func (s *PostgresStore) CreateCart(cart *Cart) error {
+func (s *PostgresStore) CreateCart(cart *types.Cart) error {
 	query := `insert into cart (user_id) values ($1)`
 	resp, err := s.db.Query(query,
 		cart.UserID,
@@ -466,12 +467,12 @@ func (s *PostgresStore) DeleteProductFromCart(cartID, productID int) error {
 	return err
 }
 
-func (s *PostgresStore) getCartByUserID(userID int) (*Cart, error) {
+func (s *PostgresStore) getCartByUserID(userID int) (*types.Cart, error) {
 	rows, err := s.db.Query(`select * from cart where user_id = $1`, userID)
 	if err != nil {
 		return nil, err
 	}
-	cart := new(Cart)
+	cart := new(types.Cart)
 	for rows.Next() {
 		cart, err = scanIntoCart(rows)
 		if err != nil {
@@ -481,9 +482,9 @@ func (s *PostgresStore) getCartByUserID(userID int) (*Cart, error) {
 	return cart, nil
 }
 
-func (s *PostgresStore) GetCartProductsByUserID(userID int) ([]*ProductCart, error) {
+func (s *PostgresStore) GetCartProductsByUserID(userID int) ([]*types.ProductCart, error) {
 	cart, err := s.getCartByUserID(userID)
-	var products []*ProductCart
+	var products []*types.ProductCart
 	if err != nil {
 		return nil, err
 	}
@@ -507,8 +508,8 @@ func (s *PostgresStore) GetCartProductsByUserID(userID int) ([]*ProductCart, err
 }
 
 
-func scanIntoCart(rows *sql.Rows) (*Cart, error) {
-	cart := new(Cart)
+func scanIntoCart(rows *sql.Rows) (*types.Cart, error) {
+	cart := new(types.Cart)
 	err := rows.Scan(
 		&cart.CartID,
 		&cart.UserID,
@@ -516,8 +517,8 @@ func scanIntoCart(rows *sql.Rows) (*Cart, error) {
 	return cart, err
 }
 
-func (s *PostgresStore) scanIntoCartProduct(rows *sql.Rows) (*ProductCart, error) {
-	prodCart := new(ProductCart)
+func (s *PostgresStore) scanIntoCartProduct(rows *sql.Rows) (*types.ProductCart, error) {
+	prodCart := new(types.ProductCart)
 	//prod := new(*Product)
 	//prod, err := s.GetProductByID(prodID)
 	err := rows.Scan(
