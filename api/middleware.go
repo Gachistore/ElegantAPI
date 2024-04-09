@@ -22,7 +22,7 @@ func createJWT(account *types.Account) (string, error) {
 }
 
 func permissionDenied(w http.ResponseWriter) {
-	WriteJSON(w, http.StatusForbidden, ApiError{Error: "permission denied"})
+	WriteJSON(w, http.StatusForbidden, ServerError{Error: "permission denied"})
 }
 
 func adminMiddleware(handlerFunc http.HandlerFunc) http.HandlerFunc {

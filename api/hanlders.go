@@ -7,11 +7,12 @@ import (
 	"github.com/gorilla/mux"
 	"math"
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 )
 
-func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != "POST" {
 		return fmt.Errorf("method not allowed %s", r.Method)
 	}
@@ -20,21 +21,23 @@ func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return err
 	}
+	if !isValidEmail(req.Email) {
+		err := fmt.Errorf("invalid email")
+		return err
+	}
 	acc, err := s.store.GetAccountByEmail(req.Email)
 	if err != nil {
 		return err
 	}
 	if !acc.ValidPassword(req.Password) {
-		fmt.Errorf("not authenticated")
+		err = fmt.Errorf("not authenticated")
+		return err
 	}
 	token, err := createJWT(acc)
 	if err != nil {
 		return err
 	}
-	//resp := types.LoginResponse{
-	//	ID:    acc.ID,
-	//	Token: token,
-	//}
+
 	cookie := http.Cookie{
 		Name:     "jwt",
 		Value:    token,
@@ -43,14 +46,13 @@ func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	http.SetCookie(w, &cookie)
-	fmt.Println(acc)
-	//return WriteJSON(w, http.StatusOK, resp)
+
 	return WriteJSON(w, http.StatusOK, "Login successful")
 }
 
 //ACCOUNT
 
-func (s *APIServer) handleAccount(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleAccount(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		return s.handleGetAccount(w, r)
 	}
@@ -64,7 +66,7 @@ func (s *APIServer) handleAccount(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
-func (s *APIServer) handleGetAccountByID(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleGetAccountByID(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		id, err := getID(r)
 		if err != nil {
@@ -85,7 +87,7 @@ func (s *APIServer) handleGetAccountByID(w http.ResponseWriter, r *http.Request)
 	return fmt.Errorf("method not allowed %s", r.Method)
 }
 
-func (s *APIServer) handleUpdateAccount(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleUpdateAccount(w http.ResponseWriter, r *http.Request) error {
 	id, err1 := getID(r)
 	if err1 != nil {
 		return err1
@@ -95,13 +97,25 @@ func (s *APIServer) handleUpdateAccount(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return err
 	}
+	if !isValidEmail(account.Email){
+		err := fmt.Errorf("invalid email")
+		return err
+	}
+	if len(account.FirstName) == 0 {
+		err := fmt.Errorf("empty firstname")
+		return err
+	}
+	if len(account.LastName) == 0 {
+		err := fmt.Errorf("empty lastname")
+		return err
+	}
 	if err := s.store.UpdateAccount(id, &account); err != nil {
 		return err
 	}
 	return WriteJSON(w, http.StatusOK, map[string]int{"updated": id})
 }
 
-func (s *APIServer) handleGetAccount(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleGetAccount(w http.ResponseWriter, r *http.Request) error {
 	accounts, err := s.store.GetAccounts()
 	if err != nil {
 		return err
@@ -109,10 +123,25 @@ func (s *APIServer) handleGetAccount(w http.ResponseWriter, r *http.Request) err
 	return WriteJSON(w, http.StatusOK, accounts)
 }
 
-func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleCreateAccount(w http.ResponseWriter, r *http.Request) error {
 	createAccountReq := new(types.CreateAccountRequest)
 	//createCartReq := new(CreateCartRequest)
 	if err := json.NewDecoder(r.Body).Decode(createAccountReq); err != nil {
+		return err
+	}
+	if !isValidEmail(createAccountReq.Email){
+		_ = fmt.Errorf("invalid email")
+	}
+	if len(createAccountReq.Password) < 8{
+		err := fmt.Errorf("password needs to be atleast 8 characters long")
+		return err
+	}
+	if len(createAccountReq.FirstName) == 0 {
+		err := fmt.Errorf("empty firstname")
+		return err
+	}
+	if len(createAccountReq.LastName) == 0 {
+		err := fmt.Errorf("empty lastname")
 		return err
 	}
 	account, err := types.NewAccount(createAccountReq.FirstName, createAccountReq.LastName, createAccountReq.Email,
@@ -139,7 +168,7 @@ func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) 
 
 	return WriteJSON(w, http.StatusOK, account)
 }
-func (s *APIServer) handleDeleteAccount(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) error {
 	id, err := getID(r)
 	if err != nil {
 		return err
@@ -152,7 +181,7 @@ func (s *APIServer) handleDeleteAccount(w http.ResponseWriter, r *http.Request) 
 
 // PRODUCT
 
-func (s *APIServer) handleProduct(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleProduct(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		return s.handleGetProduct(w, r)
 	}
@@ -169,9 +198,11 @@ func (s *APIServer) handleProduct(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
-func (s *APIServer) handleGetProductByID(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleGetProductByID(w http.ResponseWriter, r *http.Request) error {
 	idStr := mux.Vars(r)["id"]
-	if idStr == "new" {return s.handleGetNewProducts(w,r)}
+	if idStr == "new" {
+		return s.handleGetNewProducts(w, r)
+	}
 	if idStr == "categories" {
 		return s.handleGetCategory(w, r)
 	}
@@ -202,7 +233,7 @@ func (s *APIServer) handleGetProductByID(w http.ResponseWriter, r *http.Request)
 	return fmt.Errorf("method not allowed %s", r.Method)
 }
 
-func (s *APIServer) handleUpdateProduct(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleUpdateProduct(w http.ResponseWriter, r *http.Request) error {
 	id, err1 := getID(r)
 	if err1 != nil {
 		return err1
@@ -218,7 +249,7 @@ func (s *APIServer) handleUpdateProduct(w http.ResponseWriter, r *http.Request) 
 	return WriteJSON(w, http.StatusOK, map[string]int{"updated": id})
 }
 
-func (s *APIServer) handleGetProduct(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleGetProduct(w http.ResponseWriter, r *http.Request) error {
 	//product, err := s.store.GetProducts()
 	vars := r.URL.Query()
 	name := vars.Get("name")
@@ -240,7 +271,7 @@ func (s *APIServer) handleGetProduct(w http.ResponseWriter, r *http.Request) err
 	return WriteJSON(w, http.StatusOK, products)
 }
 
-func (s *APIServer) handleCreateProduct(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleCreateProduct(w http.ResponseWriter, r *http.Request) error {
 	createProductReq := new(types.CreateProductRequest)
 	if err := json.NewDecoder(r.Body).Decode(createProductReq); err != nil {
 		return err
@@ -256,7 +287,7 @@ func (s *APIServer) handleCreateProduct(w http.ResponseWriter, r *http.Request) 
 	return WriteJSON(w, http.StatusOK, product)
 }
 
-func (s *APIServer) handleDeleteProduct(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleDeleteProduct(w http.ResponseWriter, r *http.Request) error {
 	id, err := getID(r)
 	if err != nil {
 		return err
@@ -274,7 +305,7 @@ func (s *APIServer) handleDeleteProduct(w http.ResponseWriter, r *http.Request) 
 	return WriteJSON(w, http.StatusOK, map[string]int{"deleted": id})
 }
 
-func (s *APIServer) handleGetNewProducts(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleGetNewProducts(w http.ResponseWriter, r *http.Request) error {
 	products, err := s.store.GetNewProducts()
 	if err != nil {
 		return err
@@ -282,7 +313,7 @@ func (s *APIServer) handleGetNewProducts(w http.ResponseWriter, r *http.Request)
 	return WriteJSON(w, http.StatusOK, products)
 }
 
-func (s *APIServer) handleSearchProduct(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleSearchProduct(w http.ResponseWriter, r *http.Request) error {
 	vars := r.URL.Query()
 	name := vars.Get("name")
 	priceFrom := vars.Get("priceFrom")
@@ -303,7 +334,7 @@ func (s *APIServer) handleSearchProduct(w http.ResponseWriter, r *http.Request) 
 
 // REVIEW
 
-func (s *APIServer) handleReview(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		return s.handleGetReview(w, r)
 	}
@@ -319,7 +350,7 @@ func (s *APIServer) handleReview(w http.ResponseWriter, r *http.Request) error {
 
 	return nil
 }
-func (s *APIServer) handleGetReviewByID(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleGetReviewByID(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		id, err := getID(r)
 		if err != nil {
@@ -337,7 +368,7 @@ func (s *APIServer) handleGetReviewByID(w http.ResponseWriter, r *http.Request) 
 	return fmt.Errorf("method not allowed %s", r.Method)
 }
 
-func (s *APIServer) handleGetReview(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleGetReview(w http.ResponseWriter, r *http.Request) error {
 	reviews, err := s.store.GetReviews()
 	if err != nil {
 		return err
@@ -345,7 +376,7 @@ func (s *APIServer) handleGetReview(w http.ResponseWriter, r *http.Request) erro
 	return WriteJSON(w, http.StatusOK, reviews)
 }
 
-func (s *APIServer) handleUpdateReview(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleUpdateReview(w http.ResponseWriter, r *http.Request) error {
 	id, err1 := getID(r)
 	if err1 != nil {
 		return err1
@@ -365,7 +396,7 @@ func (s *APIServer) handleUpdateReview(w http.ResponseWriter, r *http.Request) e
 	return WriteJSON(w, http.StatusOK, map[string]int{"updated": id})
 }
 
-func (s *APIServer) handleCreateReview(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleCreateReview(w http.ResponseWriter, r *http.Request) error {
 	createReviewReq := new(types.CreateReviewRequest)
 	if err := json.NewDecoder(r.Body).Decode(createReviewReq); err != nil {
 		return err
@@ -378,7 +409,7 @@ func (s *APIServer) handleCreateReview(w http.ResponseWriter, r *http.Request) e
 	return WriteJSON(w, http.StatusOK, review)
 }
 
-func (s *APIServer) handleDeleteReview(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleDeleteReview(w http.ResponseWriter, r *http.Request) error {
 	id, err := getID(r)
 	if err != nil {
 		return err
@@ -391,7 +422,7 @@ func (s *APIServer) handleDeleteReview(w http.ResponseWriter, r *http.Request) e
 
 // CATEGORY
 
-func (s *APIServer) handleGetCategory(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleGetCategory(w http.ResponseWriter, r *http.Request) error {
 	caregories, err := s.store.GetCategories()
 	if err != nil {
 		return err
@@ -401,7 +432,7 @@ func (s *APIServer) handleGetCategory(w http.ResponseWriter, r *http.Request) er
 
 // CART
 
-func (s *APIServer) HandleCart(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) HandleCart(w http.ResponseWriter, r *http.Request) error {
 
 	if r.Method == "GET" {
 		return s.handleGetCart(w, r)
@@ -416,7 +447,7 @@ func (s *APIServer) HandleCart(w http.ResponseWriter, r *http.Request) error {
 
 }
 
-func (s *APIServer) handleGetCart(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleGetCart(w http.ResponseWriter, r *http.Request) error {
 	id, err := getID(r)
 	if err != nil {
 		return err
@@ -444,7 +475,7 @@ func (s *APIServer) handleGetCart(w http.ResponseWriter, r *http.Request) error 
 	return WriteJSON(w, http.StatusOK, prodQuantities) // Возвращаем слайс вместо карты
 }
 
-func (s *APIServer) handleAddProductToCart(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleAddProductToCart(w http.ResponseWriter, r *http.Request) error {
 	cartID, err := getID(r)
 	vars := r.URL.Query()
 	prodID, err := strconv.Atoi(vars.Get("prodID"))
@@ -462,7 +493,7 @@ func (s *APIServer) handleAddProductToCart(w http.ResponseWriter, r *http.Reques
 	return WriteJSON(w, http.StatusOK, map[string]int{"added: ": prodID})
 }
 
-func (s *APIServer) handleUpdateProductQuantityInCart(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handleUpdateProductQuantityInCart(w http.ResponseWriter, r *http.Request) error {
 	cartID, err := getID(r)
 	if err != nil {
 		return err
@@ -480,4 +511,14 @@ func (s *APIServer) handleUpdateProductQuantityInCart(w http.ResponseWriter, r *
 		return err
 	}
 	return WriteJSON(w, http.StatusOK, map[string]int{"updated": prodID})
+}
+
+func isValidEmail(email string) bool {
+	pattern := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+	matched, err := regexp.MatchString(pattern, email)
+	if err != nil {
+		fmt.Println("Error matching regular expression:", err)
+		return false
+	}
+	return matched
 }

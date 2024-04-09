@@ -10,7 +10,7 @@ import (
 	"strconv"
 )
 
-func (s *APIServer) Run() {
+func (s *Server) Run() {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/login", makeHTTPHandleFunc(s.handleLogin))
@@ -32,10 +32,11 @@ func (s *APIServer) Run() {
 
 	log.Println("JSON API server running on port: ", s.listenAddr)
 
-	http.ListenAndServe(s.listenAddr, router)
+	err := http.ListenAndServe(s.listenAddr, router)
+	if err != nil {
+		return
+	}
 }
-
-// MISC
 
 func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	w.Header().Add("Content-Type", "application/json")
@@ -44,12 +45,12 @@ func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
-type APIServer struct {
+type Server struct {
 	listenAddr string
 	store      storage.Storage
 }
 
-type ApiError struct {
+type ServerError struct {
 	Error string `json:"error"`
 }
 
@@ -58,13 +59,13 @@ type apiFunc func(w http.ResponseWriter, r *http.Request) error
 func makeHTTPHandleFunc(f apiFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := f(w, r); err != nil {
-			WriteJSON(w, http.StatusBadRequest, ApiError{Error: err.Error()})
+			WriteJSON(w, http.StatusBadRequest, ServerError{Error: err.Error()})
 		}
 	}
 }
 
-func NewAPIServer(listenAddr string, store storage.Storage) *APIServer {
-	return &APIServer{
+func NewAPIServer(listenAddr string, store storage.Storage) *Server {
+	return &Server{
 		listenAddr: listenAddr,
 		store:      store,
 	}
@@ -78,4 +79,3 @@ func getID(r *http.Request) (int, error) {
 	}
 	return id, nil
 }
-

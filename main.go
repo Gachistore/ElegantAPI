@@ -22,8 +22,8 @@ func seedAccount(store storage.Storage, fname, lname, email, pw string, userType
 }
 
 func seedAccounts(store storage.Storage) {
-	seedAccount(store, "a", "b", "a@b.com", "1337", types.UserTypeAdmin)
-	seedAccount(store, "c", "d", "c@d.com", "1337", types.UserTypeRegular)
+	seedAccount(store, "a", "b", "a@b.com", "13371337", types.UserTypeAdmin)
+	seedAccount(store, "c", "d", "c@d.com", "13371337", types.UserTypeRegular)
 }
 
 func main() {
