@@ -20,7 +20,7 @@ func (s *APIServer) Run() {
 
 	router.HandleFunc("/products", makeHTTPHandleFunc(s.handleProduct))
 	router.HandleFunc("/products/{id}", makeHTTPHandleFunc(s.handleGetProductByID))
-	router.HandleFunc("/products/new", makeHTTPHandleFunc(s.handleGetNewProducts))
+	//router.HandleFunc("/products/new", makeHTTPHandleFunc(s.handleGetNewProducts))
 
 	router.HandleFunc("/products/reviews", makeHTTPHandleFunc(s.handleReview))
 	router.HandleFunc("/products/reviews/{id}", makeHTTPHandleFunc(s.handleGetReviewByID))

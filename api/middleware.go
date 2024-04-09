@@ -29,8 +29,14 @@ func adminMiddleware(handlerFunc http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("calling JWT auth middleware")
 
-		tokenString := r.Header.Get("x-jwt-token")
-
+		//tokenString := r.Header.Get("x-jwt-token")
+		cookie, err := r.Cookie("jwt")
+		if err != nil {
+			println("cookie")
+			permissionDenied(w)
+			return
+		}
+		tokenString	:= cookie.Value
 		token, err := validateJWT(tokenString)
 		if err != nil {
 			permissionDenied(w)
@@ -56,8 +62,13 @@ func userMiddleware(handlerFunc http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("calling JWT auth middleware")
 
-		tokenString := r.Header.Get("x-jwt-token")
-
+		//tokenString := r.Header.Get("x-jwt-token")
+		cookie, err := r.Cookie("jwt")
+		if err != nil {
+			permissionDenied(w)
+			return
+		}
+		tokenString := cookie.Value
 		token, err := validateJWT(tokenString)
 		if err != nil {
 			permissionDenied(w)
@@ -70,21 +81,22 @@ func userMiddleware(handlerFunc http.HandlerFunc) http.HandlerFunc {
 		id, err := getID(r)
 		if err != nil {
 			permissionDenied(w)
-			fmt.Println(id)
 			return
 		}
-		claims := token.Claims.(jwt.MapClaims)
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			permissionDenied(w)
+			return
+		}
 		if int(claims["accountID"].(float64)) != id {
 			permissionDenied(w)
 			return
 		}
-
 		if claims["userType"] != string(types.UserTypeRegular) {
+			println("usertype")
 			permissionDenied(w)
 			return
 		}
-
-		fmt.Println(claims)
 		handlerFunc(w, r)
 	}
 }
@@ -93,7 +105,7 @@ func validateJWT(tokenString string) (*jwt.Token, error) {
 	secret := os.Getenv("JWT_SECRET")
 	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("Unexpected string method: %v", token.Header["alg"])
+			return nil, fmt.Errorf("unexpected string method: %v", token.Header["alg"])
 		}
 		return []byte(secret), nil
 	})

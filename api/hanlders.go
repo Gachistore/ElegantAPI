@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
@@ -30,13 +31,21 @@ func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	resp := types.LoginResponse{
-		ID:    acc.ID,
-		Token: token,
+	//resp := types.LoginResponse{
+	//	ID:    acc.ID,
+	//	Token: token,
+	//}
+	cookie := http.Cookie{
+		Name:     "jwt",
+		Value:    token,
+		Expires:  time.Now().Add(24 * time.Hour),
+		HttpOnly: true,
 	}
 
+	http.SetCookie(w, &cookie)
 	fmt.Println(acc)
-	return WriteJSON(w, http.StatusOK, resp)
+	//return WriteJSON(w, http.StatusOK, resp)
+	return WriteJSON(w, http.StatusOK, "Login successful")
 }
 
 //ACCOUNT
@@ -162,6 +171,7 @@ func (s *APIServer) handleProduct(w http.ResponseWriter, r *http.Request) error 
 
 func (s *APIServer) handleGetProductByID(w http.ResponseWriter, r *http.Request) error {
 	idStr := mux.Vars(r)["id"]
+	if idStr == "new" {return s.handleGetNewProducts(w,r)}
 	if idStr == "categories" {
 		return s.handleGetCategory(w, r)
 	}
